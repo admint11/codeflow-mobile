@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAgent } from '@blinkdotnew/react'
 import { codingAgent } from '@/lib/agent'
 import { useEditorStore } from '@/store/editorStore'
@@ -13,9 +13,16 @@ import {
   Cpu
 } from 'lucide-react'
 
-export function ChatPanel({ sandbox }: { sandbox: any }) {
+interface ChatPanelProps {
+  sandbox: any
+  initSandbox: () => Promise<any>
+  isSandboxLoading: boolean
+}
+
+export function ChatPanel({ sandbox, initSandbox, isSandboxLoading }: ChatPanelProps) {
   const { setPreviewUrl, setIsBuilding } = useEditorStore()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [activeSandbox, setActiveSandbox] = useState<any>(sandbox)
 
   const {
     messages,
@@ -27,10 +34,10 @@ export function ChatPanel({ sandbox }: { sandbox: any }) {
     clearMessages
   } = useAgent({
     agent: codingAgent,
-    sandbox,
+    sandbox: activeSandbox,
     onFinish: () => {
-      if (sandbox && !isLoading) {
-        setPreviewUrl(`https://${sandbox.getHost(3000)}`)
+      if (activeSandbox && !isLoading) {
+        setPreviewUrl(`https://${activeSandbox.getHost(3000)}`)
         setIsBuilding(false)
       }
     }
@@ -42,7 +49,26 @@ export function ChatPanel({ sandbox }: { sandbox: any }) {
     }
   }, [messages])
 
-  const onSubmit = (e: React.FormEvent) => {
+  // Keep activeSandbox in sync if parent created one
+  useEffect(() => {
+    if (sandbox && !activeSandbox) {
+      setActiveSandbox(sandbox)
+    }
+  }, [sandbox])
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!input.trim()) return
+
+    // Lazily create sandbox on first message
+    let sbx = activeSandbox
+    if (!sbx) {
+      setIsBuilding(true)
+      sbx = await initSandbox()
+      if (!sbx) return // redirected to login or failed
+      setActiveSandbox(sbx)
+    }
+
     setIsBuilding(true)
     handleSubmit(e)
   }
@@ -154,7 +180,7 @@ export function ChatPanel({ sandbox }: { sandbox: any }) {
             ) : (
               <button 
                 type="submit" 
-                disabled={!input.trim()}
+                disabled={!input.trim() || isSandboxLoading}
                 className="p-2 bg-primary text-primary-foreground rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
               >
                 <Send className="w-5 h-5" />

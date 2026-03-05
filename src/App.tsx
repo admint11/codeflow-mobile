@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useBlinkAuth } from '@blinkdotnew/react'
 import { ChatPanel } from '@/components/IDE/Chat'
 import { PreviewPanel } from '@/components/IDE/Preview'
@@ -19,29 +19,39 @@ export default function App() {
 
 function IDE() {
   const [sandbox, setSandbox] = useState<any>(null)
+  const [isSandboxLoading, setIsSandboxLoading] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isChatOpen, setIsChatOpen] = useState(true)
   const { previewUrl, setPreviewUrl } = useEditorStore()
-  const { user } = useBlinkAuth()
+  const { user, isAuthenticated, isLoading: authLoading } = useBlinkAuth()
 
-  useEffect(() => {
-    if (sandbox) return
+  // Lazy sandbox init — only called when user sends first message
+  const initSandbox = async (): Promise<any> => {
+    if (sandbox) return sandbox
 
-    // Initialize or connect to sandbox (works without auth)
-    const initSandbox = async () => {
-      try {
-        const sbx = await blink.sandbox.create({
-          template: 'devtools-base',
-          metadata: { userId: user?.id || 'anonymous' }
-        })
-        setSandbox(sbx)
-      } catch (err) {
-        console.error('Failed to init sandbox:', err)
-      }
+    // Auth guard: redirect to login if not authenticated
+    if (!isAuthenticated) {
+      blink.auth.login(window.location.href)
+      return null
     }
 
-    initSandbox()
-  }, [user, sandbox])
+    if (isSandboxLoading) return null
+
+    setIsSandboxLoading(true)
+    try {
+      const sbx = await blink.sandbox.create({
+        template: 'devtools-base',
+        metadata: { userId: user?.id || 'anonymous' }
+      })
+      setSandbox(sbx)
+      return sbx
+    } catch (err) {
+      console.error('Failed to init sandbox:', err)
+      return null
+    } finally {
+      setIsSandboxLoading(false)
+    }
+  }
 
   return (
     <div className="h-screen flex flex-col bg-[#050505] text-white overflow-hidden">
@@ -115,7 +125,7 @@ function IDE() {
             <>
               <ResizableHandle className="w-1 bg-white/5 hover:bg-primary/20 transition-colors" />
               <ResizablePanel defaultSize={35} minSize={20} maxSize={50}>
-                <ChatPanel sandbox={sandbox} />
+                <ChatPanel sandbox={sandbox} initSandbox={initSandbox} isSandboxLoading={isSandboxLoading} />
               </ResizablePanel>
             </>
           )}
@@ -126,8 +136,8 @@ function IDE() {
       <footer className="h-6 border-t border-white/5 bg-[#0a0a0a] flex items-center px-3 justify-between text-[10px] text-muted-foreground">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            Connected
+            <div className={`w-2 h-2 rounded-full ${sandbox ? 'bg-green-500 animate-pulse' : isSandboxLoading ? 'bg-yellow-500 animate-pulse' : 'bg-white/20'}`} />
+            {sandbox ? 'Sandbox Ready' : isSandboxLoading ? 'Starting sandbox...' : isAuthenticated ? 'Ready' : 'Not signed in'}
           </div>
           <span>main</span>
         </div>

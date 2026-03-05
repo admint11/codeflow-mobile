@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useBlinkAuth } from '@blinkdotnew/react'
-import { AuthGate } from '@/components/IDE/AuthGate'
 import { ChatPanel } from '@/components/IDE/Chat'
 import { PreviewPanel } from '@/components/IDE/Preview'
 import { FileExplorer } from '@/components/IDE/Explorer'
@@ -15,11 +14,7 @@ import {
 import { Code2, Play, PanelLeft, PanelRight } from 'lucide-react'
 
 export default function App() {
-  return (
-    <AuthGate>
-      <IDE />
-    </AuthGate>
-  )
+  return <IDE />
 }
 
 function IDE() {
@@ -30,14 +25,14 @@ function IDE() {
   const { user } = useBlinkAuth()
 
   useEffect(() => {
-    if (!user || sandbox) return
+    if (sandbox) return
 
-    // Initialize or connect to sandbox
+    // Initialize or connect to sandbox (works without auth)
     const initSandbox = async () => {
       try {
         const sbx = await blink.sandbox.create({
           template: 'devtools-base',
-          metadata: { userId: user.id }
+          metadata: { userId: user?.id || 'anonymous' }
         })
         setSandbox(sbx)
       } catch (err) {
